@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -24,7 +26,11 @@ public class Payment {
 
     private String currency;
 
-    private String status;
+    // If we didn't mention EnumType as String, JPA saves Enums into our database as default integers = EnumType.ORDINAL
+    // Ordinal means first Enum value is 0, then 1, then 2... This could create issues later
+    // Read on what issues can happen..
+    @Enumerated(EnumType.STRING) 
+    private PaymentStatus status;
 
     public Payment() {
     }
@@ -33,7 +39,7 @@ public class Payment {
         String orderId,
         BigDecimal amount,
         String currency,
-        String status
+        PaymentStatus status
     ) {
         this.orderId = orderId;
         this.amount = amount;
@@ -57,7 +63,7 @@ public class Payment {
         return currency;
     }
 
-    public String getStatus() {
+    public PaymentStatus getStatus() {
         return status;
     }
 }

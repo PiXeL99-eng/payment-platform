@@ -68,6 +68,13 @@ PostgreSQL JDBC Driver
     ↓
 PostgreSQL Docker Container
 
+---------------------------------
+So:
+
+Database schema ≠ API contract
+
+That's an important backend engineering principle.
+
 ----------------------------------
 
 Starting the server ->
