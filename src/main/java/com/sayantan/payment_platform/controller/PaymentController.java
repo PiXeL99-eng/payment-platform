@@ -11,10 +11,14 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 
@@ -36,12 +40,14 @@ public class PaymentController {
 
     @PostMapping("/payments")
     public PaymentResponse createPayment(
-        @Valid @RequestBody PaymentRequest request
+        @Valid @RequestBody PaymentRequest request,
+        @RequestHeader("Idempotency-Key") String idempotencyKey
     ) { 
         // @RequestBody annotation tells Spring to take the JSON data sent at this POST endpoint, 
         // and convert it to PaymentRequest Class
+        // @RequestHeader annotation takes the Header (Idempotency-Key: abc-123) and stores it in idempotencyKey String
 
-        return paymentService.createPayment(request);
+        return paymentService.createPayment(request, idempotencyKey);
     }
 
     @GetMapping("/payments/{id}")
@@ -50,9 +56,11 @@ public class PaymentController {
         return paymentService.getPayment(id);
     }
 
-    @GetMapping("/payments")
-    public List<PaymentResponse> getPayments() {
-        return paymentService.getPayments();
+    @GetMapping("/payments") // Takes URL parameters -> GET /payments?page=1&size=10; This also works -> GET http://localhost:8080/payments?page=0&size=5&sort=id,desc
+    public Page<PaymentResponse> getPayments(
+        @PageableDefault(size = 10) Pageable pageable   // Spring automatically takes the parameters and converts it to Pageable object
+    ) {
+        return paymentService.getPayments(pageable);
     }
     
 }

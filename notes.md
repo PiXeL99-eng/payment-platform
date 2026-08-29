@@ -75,6 +75,12 @@ Database schema ≠ API contract
 
 That's an important backend engineering principle.
 
+---------------------------------
+
+This is a very important backend principle:
+
+Application-level checks improve behavior, but database constraints protect data integrity.
+
 ----------------------------------
 
 Starting the server ->

@@ -32,6 +32,9 @@ public class Payment {
     @Enumerated(EnumType.STRING) 
     private PaymentStatus status;
 
+    @Column(unique = true, nullable = false)
+    private String idempotencyKey;
+
     public Payment() {
     }
 
@@ -39,12 +42,14 @@ public class Payment {
         String orderId,
         BigDecimal amount,
         String currency,
-        PaymentStatus status
+        PaymentStatus status,
+        String idempotencyKey
     ) {
         this.orderId = orderId;
         this.amount = amount;
         this.currency = currency;
         this.status = status;
+        this.idempotencyKey = idempotencyKey;
     }
 
     public Long getId() {
@@ -65,5 +70,9 @@ public class Payment {
 
     public PaymentStatus getStatus() {
         return status;
+    }
+
+    public String idempotencyKey() {
+        return idempotencyKey;
     }
 }
