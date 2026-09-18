@@ -32,6 +32,7 @@ public class Payment {
     @Enumerated(EnumType.STRING) 
     private PaymentStatus status;
 
+    // Database constraint - Idempotency Key has to be unique.
     @Column(unique = true, nullable = false)
     private String idempotencyKey;
 
@@ -70,6 +71,10 @@ public class Payment {
 
     public PaymentStatus getStatus() {
         return status;
+    }
+
+    public void setStatus(PaymentStatus newPaymentStatus) {
+        this.status = newPaymentStatus;
     }
 
     public String idempotencyKey() {

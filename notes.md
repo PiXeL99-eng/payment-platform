@@ -81,9 +81,18 @@ This is a very important backend principle:
 
 Application-level checks improve behavior, but database constraints protect data integrity.
 
+---------------------------------
+
+POST -> You use POST when the user clicks the "Create New Playlist" button. The server will create a brand-new, empty playlist in the database and automatically give it a unique ID.
+
+PUT -> You use PUT when the user wants to completely overwrite the existing playlist. Imagine they use a "Reset Playlist Layout" feature to change the title and add a whole new list of songs, wiping out whatever was there before.
+
+PATCH -> You use PATCH when the user only wants to change one specific thing, like clicking the toggle switch to make the playlist Private instead of Public, without touching the title or the songs.
+
 ----------------------------------
 
 Starting the server ->
+
 $env:JAVA_TOOL_OPTIONS="-Duser.timezone=UTC"  // Timezone fix, otherwise uses Asia/Calcutta by default
 
 .\mvnw.cmd spring-boot:run

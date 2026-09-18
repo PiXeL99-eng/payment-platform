@@ -2,19 +2,18 @@ package com.sayantan.payment_platform.controller;
 
 import org.springframework.web.bind.annotation.RestController;
 
-import com.sayantan.payment_platform.model.Payment;
 import com.sayantan.payment_platform.model.PaymentRequest;
 import com.sayantan.payment_platform.model.PaymentResponse;
+import com.sayantan.payment_platform.model.PaymentStatus;
 import com.sayantan.payment_platform.service.PaymentService;
 
 import jakarta.validation.Valid;
-
-import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -63,4 +62,11 @@ public class PaymentController {
         return paymentService.getPayments(pageable);
     }
     
+    @PatchMapping("/payments/{id}/status")
+    public PaymentResponse updatePaymentStatus(
+        @PathVariable Long id, 
+        @RequestParam PaymentStatus newPaymentStatus
+    ) {
+        return paymentService.updatePaymentStatus(id, newPaymentStatus);
+    }
 }

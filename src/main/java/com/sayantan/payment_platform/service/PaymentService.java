@@ -1,6 +1,5 @@
 package com.sayantan.payment_platform.service;
 
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -8,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sayantan.payment_platform.exception.InvalidPaymentStateException;
 import com.sayantan.payment_platform.exception.PaymentNotFoundException;
 import com.sayantan.payment_platform.model.Payment;
 import com.sayantan.payment_platform.model.PaymentEvent;
@@ -65,6 +65,35 @@ public class PaymentService {
         return toResponse(savedPayment);
     }
 
+    @Transactional
+    public PaymentResponse updatePaymentStatus(
+        Long paymentId,
+        PaymentStatus newPaymentStatus
+    ) {
+        Payment payment = paymentRepository
+        .findById(paymentId)
+        .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+
+        PaymentStatus currentPaymentStatus = payment.getStatus();
+
+        if (!isValidTransition(currentPaymentStatus, newPaymentStatus)) {
+            throw new InvalidPaymentStateException(
+                "Invalid payment status transition: " + currentPaymentStatus + " -> " + newPaymentStatus
+            );
+        }
+
+        payment.setStatus(newPaymentStatus);
+
+        PaymentEvent event = new PaymentEvent(
+            payment.getId(),
+            newPaymentStatus
+        );
+
+        paymentEventRepository.save(event);
+
+        return toResponse(payment);
+    }
+
     public PaymentResponse getPayment(Long id) {
         Payment payment = paymentRepository
         .findById(id)
@@ -87,5 +116,16 @@ public class PaymentService {
             payment.getCurrency(),
             payment.getStatus()
         );
+    }
+
+    private boolean isValidTransition(
+        PaymentStatus current,
+        PaymentStatus next
+    ) {
+        return switch(current) {
+            case CREATED -> next == PaymentStatus.PROCESSING;
+            case PROCESSING -> next == PaymentStatus.SUCCESS || next == PaymentStatus.FAILED;
+            case SUCCESS, FAILED -> false;
+        };
     }
 }
