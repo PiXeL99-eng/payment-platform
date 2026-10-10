@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RestController // Annotation that tells Spring that this class contains HTTP endpoints
 public class PaymentController {
 
-    public final PaymentService paymentService;
+    private final PaymentService paymentService;
 
     public PaymentController(PaymentService paymentService) {
         this.paymentService = paymentService;

@@ -1,7 +1,5 @@
 package com.sayantan.payment_platform.service;
 
-import java.util.Optional;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -9,8 +7,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.sayantan.payment_platform.exception.InvalidPaymentStateException;
 import com.sayantan.payment_platform.exception.PaymentNotFoundException;
+import com.sayantan.payment_platform.integration.gateway.MockPaymentGatewayClient;
+import com.sayantan.payment_platform.integration.gateway.model.GatewayPaymentRequest;
+import com.sayantan.payment_platform.integration.gateway.model.GatewayPaymentResponse;
 import com.sayantan.payment_platform.model.Payment;
 import com.sayantan.payment_platform.model.PaymentEvent;
+import com.sayantan.payment_platform.model.PaymentPreparation;
 import com.sayantan.payment_platform.model.PaymentRequest;
 import com.sayantan.payment_platform.model.PaymentResponse;
 import com.sayantan.payment_platform.model.PaymentStatus;
@@ -20,49 +22,49 @@ import com.sayantan.payment_platform.repository.PaymentRepository;
 @Service
 public class PaymentService {
 
-    public PaymentRepository paymentRepository;
-    public PaymentEventRepository paymentEventRepository;
+    private final PaymentRepository paymentRepository;
+    private final PaymentEventRepository paymentEventRepository;
+    private final PaymentPersistenceService paymentPersistenceService;
+    private final MockPaymentGatewayClient mockPaymentGatewayClient;
 
     public PaymentService(
         PaymentRepository paymentRepository,
-        PaymentEventRepository paymentEventRepository
+        PaymentEventRepository paymentEventRepository,
+        PaymentPersistenceService paymentPersistenceService,
+        MockPaymentGatewayClient mockPaymentGatewayClient
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentEventRepository = paymentEventRepository;
+        this.paymentPersistenceService = paymentPersistenceService;
+        this.mockPaymentGatewayClient = mockPaymentGatewayClient;
     }
 
-    @Transactional  // If i throw RuntimeException in the below code anywhere, Spring automatically Rolls Back the Database
     public PaymentResponse createPayment(
         PaymentRequest request,
         String idempotencyKey
     ) {
-
-        Optional<Payment> existingPayment = paymentRepository.findByIdempotencyKey(idempotencyKey);
-        
-        if (existingPayment.isPresent()) {
-            return toResponse(existingPayment.get());
+        PaymentPreparation paymentPreparation = paymentPersistenceService.preparePayment(request, idempotencyKey);
+        if (!paymentPreparation.newlyCreated()) {
+            return paymentPreparation.payment();
         }
 
-        Payment payment = new Payment(
-            request.orderId(),
-            request.amount(),
-            request.currency(),
-            PaymentStatus.CREATED,
-            idempotencyKey
+        GatewayPaymentRequest gatewayPaymentRequest = toGatewayPaymentRequest(paymentPreparation.payment());
+        
+        GatewayPaymentResponse gatewayPaymentResponse = mockPaymentGatewayClient.processPayment(gatewayPaymentRequest);
+
+        if (gatewayPaymentResponse == null) {
+            throw new IllegalStateException("Payment gateway returned an empty response");
+        }
+
+        PaymentStatus finalStatus = switch(gatewayPaymentResponse.status()) {
+            case APPROVED -> PaymentStatus.SUCCESS;
+            case DECLINED -> PaymentStatus.FAILED;
+        };
+
+        return paymentPersistenceService.completePayment(
+            paymentPreparation.payment().id(),
+            finalStatus
         );
-
-        Payment savedPayment = paymentRepository.save(payment);
-
-        // throw new RuntimeException("Testing transaction rollback");
-
-        PaymentEvent paymentEvent = new PaymentEvent(
-            savedPayment.getId(),
-            savedPayment.getStatus()
-        );
-
-        paymentEventRepository.save(paymentEvent);
-
-        return toResponse(savedPayment);
     }
 
     @Transactional
@@ -115,6 +117,15 @@ public class PaymentService {
             payment.getAmount(),
             payment.getCurrency(),
             payment.getStatus()
+        );
+    }
+
+    private GatewayPaymentRequest toGatewayPaymentRequest(PaymentResponse paymentResponse) {
+        return new GatewayPaymentRequest(
+            paymentResponse.id(),
+            paymentResponse.orderId(),
+            paymentResponse.amount(),
+            paymentResponse.currency()
         );
     }
 
