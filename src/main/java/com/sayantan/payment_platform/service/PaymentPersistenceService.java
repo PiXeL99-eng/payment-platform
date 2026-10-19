@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sayantan.payment_platform.exception.IdempotencyConflictException;
 import com.sayantan.payment_platform.exception.InvalidPaymentStateException;
 import com.sayantan.payment_platform.exception.PaymentNotFoundException;
 import com.sayantan.payment_platform.model.Payment;
@@ -39,10 +40,7 @@ public class PaymentPersistenceService {
         Optional<Payment> existingPayment = paymentRepository.findByIdempotencyKey(idempotencyKey);
         
         if (existingPayment.isPresent()) {
-            return new PaymentPreparation(
-                toResponse(existingPayment.get()),
-                false
-            );
+            return toExistingPreparation(existingPayment.get(), request);
         }
 
         Payment payment = new Payment(
@@ -79,6 +77,16 @@ public class PaymentPersistenceService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public Optional<PaymentPreparation> findExistingPayment(
+        PaymentRequest request,
+        String idempotencyKey
+    ) {
+        return paymentRepository
+            .findByIdempotencyKey(idempotencyKey)
+            .map(payment -> toExistingPreparation(payment, request));
+    }
+
     @Transactional
     public PaymentResponse completePayment(
         Long paymentId,
@@ -110,6 +118,28 @@ public class PaymentPersistenceService {
         paymentEventRepository.save(paymentEvent);
 
         return toResponse(payment);
+    }
+
+    private boolean matchesRequest(Payment payment, PaymentRequest request) {
+        return payment.getOrderId().equals(request.orderId())
+            && payment.getAmount().compareTo(request.amount()) == 0
+            && payment.getCurrency().equals(request.currency());
+    }
+
+    private PaymentPreparation toExistingPreparation(
+        Payment payment,
+        PaymentRequest request
+    ) {
+        if (!matchesRequest(payment, request)) {
+            throw new IdempotencyConflictException(
+                "Idempotency-Key was already used for a different payment request"
+            );
+        }
+
+        return new PaymentPreparation(
+            toResponse(payment),
+            false
+        );
     }
 
     private PaymentResponse toResponse(Payment payment) {

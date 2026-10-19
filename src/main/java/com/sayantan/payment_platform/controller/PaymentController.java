@@ -1,28 +1,32 @@
 package com.sayantan.payment_platform.controller;
 
+import java.util.List;
+
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sayantan.payment_platform.model.PaymentRequest;
+import com.sayantan.payment_platform.model.PaymentEventResponse;
 import com.sayantan.payment_platform.model.PaymentResponse;
-import com.sayantan.payment_platform.model.PaymentStatus;
 import com.sayantan.payment_platform.service.PaymentService;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestParam;
 
 
 
 @RestController // Annotation that tells Spring that this class contains HTTP endpoints
+@Validated
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -40,7 +44,10 @@ public class PaymentController {
     @PostMapping("/payments")
     public PaymentResponse createPayment(
         @Valid @RequestBody PaymentRequest request,
-        @RequestHeader("Idempotency-Key") String idempotencyKey
+        @RequestHeader("Idempotency-Key")
+        @NotBlank(message = "Idempotency-Key must not be blank")
+        @Size(max = 100, message = "Idempotency-Key must not exceed 100 characters")
+        String idempotencyKey
     ) { 
         // @RequestBody annotation tells Spring to take the JSON data sent at this POST endpoint, 
         // and convert it to PaymentRequest Class
@@ -55,18 +62,15 @@ public class PaymentController {
         return paymentService.getPayment(id);
     }
 
+    @GetMapping("/payments/{id}/events")
+    public List<PaymentEventResponse> getPaymentEvents(@PathVariable Long id) {
+        return paymentService.getPaymentEvents(id);
+    }
+
     @GetMapping("/payments") // Takes URL parameters -> GET /payments?page=1&size=10; This also works -> GET http://localhost:8080/payments?page=0&size=5&sort=id,desc
     public Page<PaymentResponse> getPayments(
         @PageableDefault(size = 10) Pageable pageable   // Spring automatically takes the parameters and converts it to Pageable object
     ) {
         return paymentService.getPayments(pageable);
-    }
-    
-    @PatchMapping("/payments/{id}/status")
-    public PaymentResponse updatePaymentStatus(
-        @PathVariable Long id, 
-        @RequestParam PaymentStatus newPaymentStatus
-    ) {
-        return paymentService.updatePaymentStatus(id, newPaymentStatus);
     }
 }

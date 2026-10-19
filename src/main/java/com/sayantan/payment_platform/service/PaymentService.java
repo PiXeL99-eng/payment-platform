@@ -1,17 +1,19 @@
 package com.sayantan.payment_platform.service;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import com.sayantan.payment_platform.exception.InvalidPaymentStateException;
 import com.sayantan.payment_platform.exception.PaymentNotFoundException;
 import com.sayantan.payment_platform.integration.gateway.MockPaymentGatewayClient;
 import com.sayantan.payment_platform.integration.gateway.model.GatewayPaymentRequest;
 import com.sayantan.payment_platform.integration.gateway.model.GatewayPaymentResponse;
 import com.sayantan.payment_platform.model.Payment;
 import com.sayantan.payment_platform.model.PaymentEvent;
+import com.sayantan.payment_platform.model.PaymentEventResponse;
 import com.sayantan.payment_platform.model.PaymentPreparation;
 import com.sayantan.payment_platform.model.PaymentRequest;
 import com.sayantan.payment_platform.model.PaymentResponse;
@@ -43,7 +45,20 @@ public class PaymentService {
         PaymentRequest request,
         String idempotencyKey
     ) {
-        PaymentPreparation paymentPreparation = paymentPersistenceService.preparePayment(request, idempotencyKey);
+        PaymentPreparation paymentPreparation;
+
+        try {
+            paymentPreparation = paymentPersistenceService.preparePayment(
+                request,
+                idempotencyKey
+            );
+        } catch (DataIntegrityViolationException ex) {
+            // concurrent idempotency-key collision recovery.
+            paymentPreparation = paymentPersistenceService
+                .findExistingPayment(request, idempotencyKey)
+                .orElseThrow(() -> ex);
+        }
+
         if (!paymentPreparation.newlyCreated()) {
             return paymentPreparation.payment();
         }
@@ -51,10 +66,6 @@ public class PaymentService {
         GatewayPaymentRequest gatewayPaymentRequest = toGatewayPaymentRequest(paymentPreparation.payment());
         
         GatewayPaymentResponse gatewayPaymentResponse = mockPaymentGatewayClient.processPayment(gatewayPaymentRequest);
-
-        if (gatewayPaymentResponse == null) {
-            throw new IllegalStateException("Payment gateway returned an empty response");
-        }
 
         PaymentStatus finalStatus = switch(gatewayPaymentResponse.status()) {
             case APPROVED -> PaymentStatus.SUCCESS;
@@ -65,35 +76,6 @@ public class PaymentService {
             paymentPreparation.payment().id(),
             finalStatus
         );
-    }
-
-    @Transactional
-    public PaymentResponse updatePaymentStatus(
-        Long paymentId,
-        PaymentStatus newPaymentStatus
-    ) {
-        Payment payment = paymentRepository
-        .findById(paymentId)
-        .orElseThrow(() -> new PaymentNotFoundException(paymentId));
-
-        PaymentStatus currentPaymentStatus = payment.getStatus();
-
-        if (!isValidTransition(currentPaymentStatus, newPaymentStatus)) {
-            throw new InvalidPaymentStateException(
-                "Invalid payment status transition: " + currentPaymentStatus + " -> " + newPaymentStatus
-            );
-        }
-
-        payment.setStatus(newPaymentStatus);
-
-        PaymentEvent event = new PaymentEvent(
-            payment.getId(),
-            newPaymentStatus
-        );
-
-        paymentEventRepository.save(event);
-
-        return toResponse(payment);
     }
 
     public PaymentResponse getPayment(Long id) {
@@ -108,6 +90,18 @@ public class PaymentService {
         return paymentRepository
         .findAll(pageable)  // Spring JPA repository already provides findAll with pageable parameter, so it takes pageable object and returns a Page of Payments (like a list of Payments)
         .map(this::toResponse);     // Apply map function to each Payment, and convert it to PaymentResponse
+    }
+
+    public List<PaymentEventResponse> getPaymentEvents(Long paymentId) {
+        if (!paymentRepository.existsById(paymentId)) {
+            throw new PaymentNotFoundException(paymentId);
+        }
+
+        return paymentEventRepository
+            .findByPaymentIdOrderByCreatedAtAscIdAsc(paymentId)
+            .stream()
+            .map(this::toEventResponse)
+            .toList();
     }
 
     private PaymentResponse toResponse(Payment payment) {
@@ -129,14 +123,13 @@ public class PaymentService {
         );
     }
 
-    private boolean isValidTransition(
-        PaymentStatus current,
-        PaymentStatus next
-    ) {
-        return switch(current) {
-            case CREATED -> next == PaymentStatus.PROCESSING;
-            case PROCESSING -> next == PaymentStatus.SUCCESS || next == PaymentStatus.FAILED;
-            case SUCCESS, FAILED -> false;
-        };
+    private PaymentEventResponse toEventResponse(PaymentEvent event) {
+        return new PaymentEventResponse(
+            event.getId(),
+            event.getPaymentId(),
+            event.getStatus(),
+            event.getCreatedAt()
+        );
     }
+
 }

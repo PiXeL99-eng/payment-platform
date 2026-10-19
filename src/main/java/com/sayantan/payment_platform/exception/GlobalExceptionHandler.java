@@ -2,6 +2,8 @@ package com.sayantan.payment_platform.exception;
 
 import java.time.Instant;
 
+import jakarta.validation.ConstraintViolationException;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -36,5 +38,63 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotencyConflict(
+        IdempotencyConflictException ex
+    ) {
+        ErrorResponse error = new ErrorResponse(
+            HttpStatus.CONFLICT.value(),
+            ex.getMessage(),
+            Instant.now().toString()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(
+        ConstraintViolationException ex
+    ) {
+        String message = ex.getConstraintViolations()
+            .stream()
+            .findFirst()
+            .map(violation -> violation.getMessage())
+            .orElse("Request validation failed");
+
+        ErrorResponse error = new ErrorResponse(
+            HttpStatus.BAD_REQUEST.value(),
+            message,
+            Instant.now().toString()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(GatewayTimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleGatewayTimeout(
+        GatewayTimeoutException ex
+    ) {
+        ErrorResponse error = new ErrorResponse(
+            HttpStatus.GATEWAY_TIMEOUT.value(),
+            ex.getMessage(),
+            Instant.now().toString()
+        );
+
+        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(error);
+    }
+
+    @ExceptionHandler(GatewayUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleGatewayUnavailable(
+        GatewayUnavailableException ex
+    ) {
+        ErrorResponse error = new ErrorResponse(
+            HttpStatus.BAD_GATEWAY.value(),
+            ex.getMessage(),
+            Instant.now().toString()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(error);
     }
 }

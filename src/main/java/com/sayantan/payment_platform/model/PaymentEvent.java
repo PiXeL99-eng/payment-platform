@@ -1,6 +1,6 @@
 package com.sayantan.payment_platform.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -23,7 +23,7 @@ public class PaymentEvent {
     @Enumerated(EnumType.STRING)
     private PaymentStatus status;
 
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     public PaymentEvent() {
     }
@@ -34,7 +34,7 @@ public class PaymentEvent {
     ) {
         this.paymentId = paymentId;
         this.status = status;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = Instant.now();
     }
 
     public Long getId() {
@@ -49,7 +49,7 @@ public class PaymentEvent {
         return status;
     }
 
-    public LocalDateTime getCreatedAt() {
+    public Instant getCreatedAt() {
         return createdAt;
     }
 }

@@ -9,8 +9,10 @@ Spring Boot payment service that stores payments in PostgreSQL and calls the loc
 - Records `CREATED`, `PROCESSING`, and final status events.
 - Calls the mock gateway on port `8081`.
 - Maps gateway `APPROVED` to `SUCCESS` and `DECLINED` to `FAILED`.
-- Leaves a payment in `PROCESSING` if the gateway call times out.
-- Supports retrieving one payment and listing payments with pagination.
+- Returns `504 Gateway Timeout` and leaves the payment in `PROCESSING` if the gateway call times out.
+- Returns `502 Bad Gateway` and leaves the payment in `PROCESSING` if the gateway is unavailable or returns an invalid response.
+- Supports retrieving one payment, its ordered event history, and listing payments with pagination.
+- Stores event timestamps as UTC instants.
 
 ## Prerequisites
 
@@ -35,6 +37,26 @@ $env:JAVA_TOOL_OPTIONS="-Duser.timezone=UTC"
 ```
 
 The environment variable applies to the current PowerShell session. If you open a new terminal, set it again before starting the application.
+
+### First Flyway startup with an existing database
+
+If the database was originally created by Hibernate and does not yet contain a `flyway_schema_history` table, enable one-time baselining before the first startup:
+
+Back up the database first if the existing development data matters to you.
+
+```powershell
+$env:JAVA_TOOL_OPTIONS="-Duser.timezone=UTC"
+$env:FLYWAY_BASELINE_ON_MIGRATE="true"
+.\mvnw.cmd spring-boot:run
+```
+
+Flyway records the existing schema as version 1 and then applies version 2, which converts event timestamps to UTC instants and adds the event foreign key and lookup index. After that successful startup, open a new terminal or remove the temporary variable:
+
+```powershell
+Remove-Item Env:FLYWAY_BASELINE_ON_MIGRATE
+```
+
+For a new empty database, do not enable baselining; Flyway applies every migration normally.
 
 Start the mock gateway before creating a payment. See `../mock-payment-gateway/README.md`.
 
@@ -67,10 +89,11 @@ Get payments:
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/payments/1
+Invoke-RestMethod http://localhost:8080/payments/1/events
 Invoke-RestMethod "http://localhost:8080/payments?page=0&size=10&sort=id,desc"
 ```
 
-Use a new idempotency key for each new payment. Reusing a key returns the existing payment without calling the gateway again.
+The idempotency key must not be blank and must contain at most 100 characters. Reusing a key with the same payment data returns the existing payment without calling the gateway again. Reusing it with different payment data returns `409 Conflict`. Concurrent requests using the same key are resolved to the single payment protected by the database unique constraint.
 
 ## Inspect PostgreSQL
 
@@ -86,6 +109,7 @@ Useful commands inside `psql`:
 \dt
 \d payments
 \d payment_events
+SELECT * FROM flyway_schema_history ORDER BY installed_rank;
 SELECT * FROM payments ORDER BY id;
 SELECT * FROM payment_events ORDER BY id;
 SELECT * FROM payment_events WHERE payment_id = 1 ORDER BY created_at;
