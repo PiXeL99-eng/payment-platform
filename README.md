@@ -93,7 +93,22 @@ Invoke-RestMethod http://localhost:8080/payments/1/events
 Invoke-RestMethod "http://localhost:8080/payments?page=0&size=10&sort=id,desc"
 ```
 
-The idempotency key must not be blank and must contain at most 100 characters. Reusing a key with the same payment data returns the existing payment without calling the gateway again. Reusing it with different payment data returns `409 Conflict`. Concurrent requests using the same key are resolved to the single payment protected by the database unique constraint.
+The idempotency key is required, must not be blank, and must contain at most 100 characters. Reusing a key with the same payment data returns the existing payment without calling the gateway again. Reusing it with different payment data returns `409 Conflict`. Concurrent requests using the same key are resolved to the single payment protected by the database unique constraint.
+
+Invalid payment request fields return `400 Bad Request` with the field validation messages in the standard error response.
+
+## Run tests
+
+Run the complete test suite from this directory:
+
+```powershell
+.\mvnw.cmd test
+```
+
+The persistence integration tests use Testcontainers to start a temporary
+PostgreSQL database. Docker Desktop must be running before executing the full
+test suite. Flyway applies the migrations to this disposable database, which
+is removed after the tests finish.
 
 ## Inspect PostgreSQL
 
